@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient'; // Hier importieren wir deine Verbindung
+import { supabase } from './supabaseClient'; 
 
 interface TimeEntry {
   id?: number;
   project: string;
-  duration: number;
+  duration: number; // Wir speichern hier jetzt Sekunden
   created_at?: string;
 }
 
@@ -32,7 +32,7 @@ export default function Home() {
     if (error) console.error('Fehler beim Laden:', error);
   }
 
-  // Timer-Logik
+  // Timer-Logik (läuft in Millisekunden für die flüssige Anzeige)
   useEffect(() => {
     let interval: any;
     if (isRunning && startTime !== null) {
@@ -46,17 +46,21 @@ export default function Home() {
   // 2. Speichern in Supabase beim Stoppen
   const handleStartStop = async () => {
     if (isRunning) {
-      const duration = elapsedTime;
+      // FIX: Umrechnung von Millisekunden in ganze Sekunden für die Datenbank
+      const durationInSeconds = Math.floor(elapsedTime / 1000);
       
       const { error } = await supabase
         .from('time_entries')
-        .insert([{ project, duration }]);
+        .insert([{ 
+          project: project, 
+          duration: durationInSeconds // Wir senden Sekunden
+        }]);
 
       if (error) {
-        alert('Fehler beim Speichern in der Cloud!');
+        alert('Fehler beim Speichern: ' + error.message);
         console.error(error);
       } else {
-        fetchEntries(); // Liste neu laden
+        fetchEntries(); 
       }
 
       setIsRunning(false);
@@ -68,7 +72,10 @@ export default function Home() {
     }
   };
 
-  const formatTime = (ms: number) => {
+  // Hilfsfunktion zur Formatierung
+  const formatTime = (input: number, isMs: boolean = true) => {
+    // Wenn es keine Millisekunden sind (aus der DB), wandeln wir es für die Logik kurz um
+    const ms = isMs ? input : input * 1000;
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor(ms / (1000 * 60 * 60));
@@ -80,19 +87,20 @@ export default function Home() {
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
         <h1 className="text-2xl font-bold mb-6 text-center text-gray-800">Team Zeiterfassung</h1>
         
+        {/* Anzeige nutzt Millisekunden (elapsedTime) */}
         <div className="text-5xl font-mono text-center mb-8 text-blue-600 bg-blue-50 py-4 rounded-lg">
-          {formatTime(elapsedTime)}
+          {formatTime(elapsedTime, true)}
         </div>
 
         <select 
-          className="w-full p-3 mb-4 border rounded-lg"
+          className="w-full p-3 mb-4 border rounded-lg bg-white"
           value={project}
           onChange={(e) => setProject(e.target.value)}
           disabled={isRunning}
         >
-          <option>Projekt A</option>
-          <option>Projekt B</option>
-          <option>Meeting</option>
+          <option value="Projekt A">Projekt A</option>
+          <option value="Projekt B">Projekt B</option>
+          <option value="Meeting">Meeting</option>
         </select>
 
         <button
@@ -105,14 +113,16 @@ export default function Home() {
         </button>
 
         <div className="mt-10">
-          <h2 className="font-bold text-gray-700 mb-4">Letzte Einträge (Cloud)</h2>
-          <div className="space-y-2">
+          <h2 className="font-bold text-gray-700 mb-4 border-b pb-2">Letzte Einträge (Cloud)</h2>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
             {history.map((entry, index) => (
-              <div key={index} className="flex justify-between p-3 bg-gray-50 rounded border">
+              <div key={entry.id || index} className="flex justify-between p-3 bg-gray-50 rounded border border-gray-100">
                 <span className="font-medium text-gray-600">{entry.project}</span>
-                <span className="font-mono text-blue-500">{formatTime(entry.duration)}</span>
+                {/* FIX: Da entry.duration aus der DB Sekunden sind, isMs = false */}
+                <span className="font-mono text-blue-500">{formatTime(entry.duration, false)}</span>
               </div>
             ))}
+            {history.length === 0 && <p className="text-gray-400 text-sm text-center">Noch keine Einträge vorhanden.</p>}
           </div>
         </div>
       </div>
